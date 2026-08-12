@@ -142,48 +142,163 @@ pub fn wrap_custom(body_html: &str, unsub_url: &str) -> (String, String) {
 }
 
 /// Standalone subscribe page served at the service root (newsletter.stephens.page/).
+///
+/// Carries the same light/dark/system control as stephens.page: system preference
+/// is the default, `data-theme` on `<html>` is set only when the visitor pins light
+/// or dark, and the choice persists under `localStorage.theme`. The toggle cycles
+/// system -> light -> dark -> system, matching `stephens.page/theme.js`.
+///
+/// Built by placeholder substitution rather than `format!` because the page carries
+/// enough inline CSS and JS that doubling every brace hurts more than it helps.
 pub fn subscribe_page(sitekey: &str, list: &str, display: &str) -> String {
-    let k = esc(sitekey);
-    let list = esc(list);
-    let d = esc(display);
-    format!(
-        r#"<!DOCTYPE html>
+    SUBSCRIBE_PAGE
+        .replace("__SITEKEY__", &esc(sitekey))
+        .replace("__LIST__", &esc(list))
+        .replace("__DISPLAY__", &esc(display))
+}
+
+const SUBSCRIBE_PAGE: &str = r##"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <link rel="icon" type="image/png" href="https://stephens.page/bee-favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#9b4d24">
 <title>Subscribe | Jacob Stephens' blog</title>
 <meta name="description" content="Subscribe to get new posts from Jacob Stephens' blog by email.">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
-:root{{--ink:#181512;--brand:#9b4d24;--muted:#625a52;--surface:#fff;--soft:#efe9df;--rule:#d6d1c9;}}
-*{{margin:0;padding:0;box-sizing:border-box;}}
-body{{font-family:'Source Sans 3',Arial,sans-serif;background:var(--surface);color:var(--ink);line-height:1.7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;}}
-.card{{max-width:480px;width:100%;}}
-.eyebrow{{color:var(--brand);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.6rem;}}
-h1{{font-family:'Source Serif 4',Georgia,serif;font-weight:700;font-size:clamp(1.8rem,4vw,2.4rem);line-height:1.1;margin-bottom:.6rem;}}
-p.lead{{color:var(--muted);margin-bottom:1.4rem;}}
-form{{display:flex;flex-direction:column;gap:.8rem;}}
-.row{{display:flex;gap:.6rem;flex-wrap:wrap;}}
-input[type=email]{{flex:1 1 220px;padding:.65rem .8rem;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;}}
-input[type=email]:focus-visible{{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand);}}
-button{{padding:.65rem 1.3rem;font:inherit;font-weight:700;color:#fff;background:var(--brand);border:1px solid var(--brand);border-radius:6px;cursor:pointer;}}
-button:hover:not(:disabled){{background:#843f1d;}}
-button:disabled{{opacity:.6;cursor:default;}}
-.hp{{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}}
-.status{{font-size:.95rem;min-height:1.2em;margin:0;}}
-.status.ok{{color:#2f6b34;}}
-.status.err{{color:#a3372a;}}
-.fine{{color:var(--muted);font-size:.82rem;margin:0;}}
-.foot{{margin-top:1.6rem;font-size:.85rem;}}
-a{{color:var(--brand);}}
+/* Light is the base palette; system dark applies unless the visitor pinned light. */
+:root{color-scheme:light dark;--ink:#181512;--brand:#9b4d24;--brand-ink:#fff;--muted:#625a52;--surface:#fff;--soft:#efe9df;--rule:#d6d1c9;--ok:#2f6b34;--err:#a3372a;--brand-hover:#843f1d;}
+html[data-theme="light"]{color-scheme:light;}
+html[data-theme="dark"]{color-scheme:dark;--ink:#f0ebe4;--brand:#d4a07a;--brand-ink:#141210;--muted:#a89f94;--surface:#141210;--soft:#1e1a16;--rule:#3a342e;--ok:#8ec894;--err:#e8907f;--brand-hover:#e3b492;}
+@media (prefers-color-scheme:dark){
+html:not([data-theme="light"]){color-scheme:dark;--ink:#f0ebe4;--brand:#d4a07a;--brand-ink:#141210;--muted:#a89f94;--surface:#141210;--soft:#1e1a16;--rule:#3a342e;--ok:#8ec894;--err:#e8907f;--brand-hover:#e3b492;}
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Source Sans 3',Arial,sans-serif;background:var(--surface);color:var(--ink);line-height:1.7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.5rem;}
+.card{max-width:480px;width:100%;}
+.eyebrow{color:var(--brand);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.6rem;}
+h1{font-family:'Source Serif 4',Georgia,serif;font-weight:700;font-size:clamp(1.8rem,4vw,2.4rem);line-height:1.1;margin-bottom:.6rem;}
+p.lead{color:var(--muted);margin-bottom:1.4rem;}
+form{display:flex;flex-direction:column;gap:.8rem;}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;}
+input[type=email]{flex:1 1 220px;padding:.65rem .8rem;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--rule);border-radius:6px;}
+input[type=email]:focus-visible{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand);}
+button[type=submit]{padding:.65rem 1.3rem;font:inherit;font-weight:700;color:var(--brand-ink);background:var(--brand);border:1px solid var(--brand);border-radius:6px;cursor:pointer;}
+button[type=submit]:hover:not(:disabled){background:var(--brand-hover);border-color:var(--brand-hover);}
+button[type=submit]:disabled{opacity:.6;cursor:default;}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;}
+.status{font-size:.95rem;min-height:1.2em;margin:0;}
+.status.ok{color:var(--ok);}
+.status.err{color:var(--err);}
+.fine{color:var(--muted);font-size:.82rem;margin:0;}
+.foot{margin-top:1.6rem;font-size:.85rem;}
+a{color:var(--brand);}
+/* Theme control: fixed, since this page has no header bar to hang it off. */
+.theme-toggle{position:fixed;top:.85rem;right:.85rem;z-index:40;display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;padding:0;border:1px solid var(--rule);border-radius:999px;background:var(--soft);color:var(--ink);cursor:pointer;line-height:1;box-shadow:0 2px 10px rgba(0,0,0,.12);transition:border-color .15s ease,background .15s ease,color .15s ease;}
+.theme-toggle:hover,.theme-toggle:focus-visible{border-color:var(--brand);color:var(--brand);outline:none;}
+.theme-toggle:focus-visible{box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 28%,transparent);}
+.theme-toggle svg{width:1.05rem;height:1.05rem;display:block;pointer-events:none;}
+/* Show the icon for the current preference, not the next click target. */
+.theme-toggle .icon-sun,.theme-toggle .icon-moon,.theme-toggle .icon-system{display:none;}
+html:not([data-theme="light"]):not([data-theme="dark"]) .theme-toggle .icon-system{display:block;}
+html[data-theme="light"] .theme-toggle .icon-sun{display:block;}
+html[data-theme="dark"] .theme-toggle .icon-moon{display:block;}
+/* Transitions only after first paint, so the initial theme does not animate in. */
+html.theme-ready,html.theme-ready body{transition:background-color .18s ease,color .18s ease,border-color .18s ease;}
+@media (prefers-reduced-motion:reduce){html.theme-ready,html.theme-ready body{transition:none!important;}}
 </style>
+<script>
+// Runs while the head is still parsing: sets data-theme before first paint (no flash),
+// and defines window.tsLoad up front so the async Turnstile API always finds it.
+(function(){
+  var KEY='theme',TS_LIGHT='#9b4d24',TS_DARK='#141210';
+  var btn=null,ts=null,tsId=null,tsReady=false,domReady=false;
+
+  function stored(){
+    try{
+      var v=localStorage.getItem(KEY);
+      if(v==='light'||v==='dark')return v;
+      if(v==='system')localStorage.removeItem(KEY);
+    }catch(e){}
+    return null;
+  }
+  function write(v){try{if(v)localStorage.setItem(KEY,v);else localStorage.removeItem(KEY);}catch(e){}}
+  function sysDark(){return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);}
+  function effective(){return stored()||(sysDark()?'dark':'light');}
+  function nextPref(s){return s===null?'light':(s==='light'?'dark':null);}
+
+  function setAttr(p){
+    var r=document.documentElement;
+    if(p==='light'||p==='dark')r.setAttribute('data-theme',p);else r.removeAttribute('data-theme');
+  }
+  function metaColor(){
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m)m.setAttribute('content',effective()==='dark'?TS_DARK:TS_LIGHT);
+  }
+  function labels(){
+    if(!btn)return;
+    var s=stored(),cur=s===null?'system':s,n=nextPref(s),nl=n===null?'system':n;
+    var t='Theme: '+cur+' (click for '+nl+')';
+    btn.setAttribute('aria-label',t);btn.setAttribute('title',t);
+  }
+  // Turnstile is rendered explicitly so the widget can be re-rendered in the
+  // matching theme when the visitor toggles.
+  function renderTurnstile(){
+    if(!tsReady||!domReady||!ts||!window.turnstile)return;
+    if(tsId!==null){try{window.turnstile.remove(tsId);}catch(e){}tsId=null;}
+    ts.innerHTML='';
+    try{tsId=window.turnstile.render(ts,{sitekey:ts.getAttribute('data-sitekey'),theme:effective()});}catch(e){}
+  }
+  function apply(p){setAttr(p);metaColor();labels();renderTurnstile();}
+
+  setAttr(stored());
+  window.tsLoad=function(){tsReady=true;renderTurnstile();};
+
+  function onDom(){
+    domReady=true;
+    ts=document.getElementById('ts');
+    btn=document.getElementById('theme-btn');
+    if(btn)btn.addEventListener('click',function(){var n=nextPref(stored());write(n);apply(n);});
+    metaColor();labels();
+    if(window.turnstile)tsReady=true;
+    renderTurnstile();
+
+    var f=document.getElementById('f'),sub=document.getElementById('btn'),s=document.getElementById('status');
+    f.addEventListener('submit',function(e){
+      e.preventDefault();s.className='status';s.textContent='';sub.disabled=true;sub.textContent='Subscribing...';
+      fetch('/subscribe',{method:'POST',body:new URLSearchParams(new FormData(f))})
+        .then(function(r){return r.json().catch(function(){return {ok:false,message:'Unexpected response.'};});})
+        .then(function(j){s.textContent=j.message||(j.ok?'Thanks!':'Something went wrong.');s.className='status '+(j.ok?'ok':'err');if(j.ok){f.reset();}})
+        .catch(function(){s.textContent='Network error. Please try again.';s.className='status err';})
+        .finally(function(){sub.disabled=false;sub.textContent='Subscribe';if(window.turnstile&&tsId!==null){try{window.turnstile.reset(tsId);}catch(e){}}});
+    });
+
+    requestAnimationFrame(function(){document.documentElement.classList.add('theme-ready');});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',onDom);else onDom();
+
+  // Track OS changes live while the visitor has not pinned a theme.
+  if(window.matchMedia){
+    var mql=window.matchMedia('(prefers-color-scheme: dark)');
+    var onch=function(){if(!stored())apply(null);};
+    if(typeof mql.addEventListener==='function')mql.addEventListener('change',onch);
+    else if(typeof mql.addListener==='function')mql.addListener(onch);
+  }
+  window.addEventListener('storage',function(e){if(e.key===KEY)apply(stored());});
+})();
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&amp;onload=tsLoad" async defer></script>
 </head>
 <body>
+<button type="button" class="theme-toggle" id="theme-btn" aria-label="Toggle color theme">
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>
+  <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 14.5A8.5 8.5 0 1 1 9.5 3a7 7 0 0 0 11.5 11.5z"></path></svg>
+  <svg class="icon-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
+</button>
 <div class="card">
-  <div class="eyebrow">{d}</div>
+  <div class="eyebrow">__DISPLAY__</div>
   <h1>Get new posts by email</h1>
   <p class="lead">Occasional writeups, sent when I publish. No spam, unsubscribe anytime.</p>
   <form id="f" novalidate>
@@ -191,31 +306,16 @@ a{{color:var(--brand);}}
       <input type="email" name="email" id="email" placeholder="you@example.com" autocomplete="email" required aria-label="Email address">
       <button type="submit" id="btn">Subscribe</button>
     </div>
-    <input type="hidden" name="list" value="{list}">
+    <input type="hidden" name="list" value="__LIST__">
     <div class="hp" aria-hidden="true"><label>Leave this field empty<input type="text" name="website_url" tabindex="-1" autocomplete="off"></label></div>
-    <div class="cf-turnstile" data-sitekey="{k}" data-theme="light"></div>
+    <div id="ts" data-sitekey="__SITEKEY__"></div>
     <p class="status" id="status" role="status" aria-live="polite"></p>
     <p class="fine">You'll get a confirmation email to opt in, and every email has a one-click unsubscribe.</p>
   </form>
   <p class="foot"><a href="https://stephens.page/blog/">&larr; Read the blog</a></p>
 </div>
-<script>
-(function(){{
-  var f=document.getElementById('f'),btn=document.getElementById('btn'),s=document.getElementById('status');
-  f.addEventListener('submit',function(e){{
-    e.preventDefault();s.className='status';s.textContent='';btn.disabled=true;btn.textContent='Subscribing...';
-    fetch('/subscribe',{{method:'POST',body:new URLSearchParams(new FormData(f))}})
-      .then(function(r){{return r.json().catch(function(){{return {{ok:false,message:'Unexpected response.'}};}});}})
-      .then(function(j){{s.textContent=j.message||(j.ok?'Thanks!':'Something went wrong.');s.className='status '+(j.ok?'ok':'err');if(j.ok){{f.reset();}}}})
-      .catch(function(){{s.textContent='Network error. Please try again.';s.className='status err';}})
-      .finally(function(){{btn.disabled=false;btn.textContent='Subscribe';if(window.turnstile){{try{{window.turnstile.reset();}}catch(e){{}}}}}});
-  }});
-}})();
-</script>
 </body>
-</html>"#
-    )
-}
+</html>"##;
 
 /// Branded landing page (confirm / unsubscribe screens), mirrors the blog style.
 pub fn landing_page(title: &str, heading: &str, body_html: &str) -> String {
