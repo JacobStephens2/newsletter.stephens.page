@@ -228,7 +228,7 @@ html.theme-ready,html.theme-ready body{transition:background-color .18s ease,col
   }
   function write(v){try{if(v)localStorage.setItem(KEY,v);else localStorage.removeItem(KEY);}catch(e){}}
   function sysDark(){return !!(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);}
-  function effective(){return stored()||(sysDark()?'dark':'light');}
+  function effective(){return pref||(sysDark()?'dark':'light');}
   function nextPref(s){return s===null?'light':(s==='light'?'dark':null);}
 
   function setAttr(p){
@@ -241,7 +241,7 @@ html.theme-ready,html.theme-ready body{transition:background-color .18s ease,col
   }
   function labels(){
     if(!btn)return;
-    var s=stored(),cur=s===null?'system':s,n=nextPref(s),nl=n===null?'system':n;
+    var s=pref,cur=s===null?'system':s,n=nextPref(s),nl=n===null?'system':n;
     var t='Theme: '+cur+' (click for '+nl+')';
     btn.setAttribute('aria-label',t);btn.setAttribute('title',t);
   }
@@ -253,16 +253,19 @@ html.theme-ready,html.theme-ready body{transition:background-color .18s ease,col
     ts.innerHTML='';
     try{tsId=window.turnstile.render(ts,{sitekey:ts.getAttribute('data-sitekey'),theme:effective()});}catch(e){}
   }
-  function apply(p){setAttr(p);metaColor();labels();renderTurnstile();}
+  function apply(p){pref=(p==='light'||p==='dark')?p:null;setAttr(pref);metaColor();labels();renderTurnstile();}
 
-  setAttr(stored());
+  // The preference lives in memory; storage is only best-effort persistence. Reading it
+  // back on each click stalls the toggle at "light" when storage is blocked.
+  var pref=stored();
+  setAttr(pref);
   window.tsLoad=function(){tsReady=true;renderTurnstile();};
 
   function onDom(){
     domReady=true;
     ts=document.getElementById('ts');
     btn=document.getElementById('theme-btn');
-    if(btn)btn.addEventListener('click',function(){var n=nextPref(stored());write(n);apply(n);});
+    if(btn)btn.addEventListener('click',function(){var n=nextPref(pref);write(n);apply(n);});
     metaColor();labels();
     if(window.turnstile)tsReady=true;
     renderTurnstile();
@@ -284,7 +287,7 @@ html.theme-ready,html.theme-ready body{transition:background-color .18s ease,col
   // Track OS changes live while the visitor has not pinned a theme.
   if(window.matchMedia){
     var mql=window.matchMedia('(prefers-color-scheme: dark)');
-    var onch=function(){if(!stored())apply(null);};
+    var onch=function(){if(!pref)apply(null);};
     if(typeof mql.addEventListener==='function')mql.addEventListener('change',onch);
     else if(typeof mql.addListener==='function')mql.addListener(onch);
   }
