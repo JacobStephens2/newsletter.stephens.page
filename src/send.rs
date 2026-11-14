@@ -190,7 +190,7 @@ pub async fn send_custom(state: &AppState, list: &str, subject: &str, body_html:
 
     for (email, token) in &recipients {
         let uu = unsub_url(state, token);
-        let (html, text) = mail::wrap_custom(body_html, &uu);
+        let (html, text) = mail::wrap_custom(body_html, &uu, lc.subscribed_at);
         match mail::send(&state.http, &state.cfg.resend_key, &from, email, subject, &html, &text, &unsub_headers(lc.from_email, &uu)).await {
             Ok(_) => sent += 1,
             Err(e) => {
@@ -200,7 +200,7 @@ pub async fn send_custom(state: &AppState, list: &str, subject: &str, body_html:
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
-    let repr = mail::wrap_custom(body_html, &unsub_url(state, "preview")).0;
+    let repr = mail::wrap_custom(body_html, &unsub_url(state, "preview"), lc.subscribed_at).0;
     {
         let conn = state.db.lock().unwrap();
         crate::db::record_send(&conn, &format!("(compose) {subject}"), subject, crate::now(), sent as i64, &repr, list)?;
@@ -212,7 +212,7 @@ pub async fn send_custom(state: &AppState, list: &str, subject: &str, body_html:
 pub async fn send_test(state: &AppState, list: &str, subject: &str, body_html: &str, to: &str) -> anyhow::Result<String> {
     let lc = crate::list_cfg(list);
     let uu = unsub_url(state, "preview");
-    let (html, text) = mail::wrap_custom(body_html, &uu);
+    let (html, text) = mail::wrap_custom(body_html, &uu, lc.subscribed_at);
     let from = format!("{} <{}>", lc.from_name, lc.from_email);
     mail::send(&state.http, &state.cfg.resend_key, &from, to, subject, &html, &text, &HashMap::new()).await
 }

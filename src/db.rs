@@ -145,6 +145,16 @@ pub fn insert_pending(conn: &Connection, email: &str, confirm_token: &str, unsub
     Ok(())
 }
 
+/// The list a pending confirm token belongs to.
+pub fn list_for_confirm_token(conn: &Connection, token: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row("SELECT list FROM subscribers WHERE confirm_token = ?", [token], |r| r.get(0)).optional()
+}
+
+/// The list an unsubscribe token belongs to.
+pub fn list_for_unsubscribe_token(conn: &Connection, token: &str) -> rusqlite::Result<Option<String>> {
+    conn.query_row("SELECT list FROM subscribers WHERE unsubscribe_token = ?", [token], |r| r.get(0)).optional()
+}
+
 pub fn confirm(conn: &Connection, token: &str, now: i64) -> rusqlite::Result<bool> {
     let n = conn.execute(
         "UPDATE subscribers SET status='confirmed', confirmed_at=?1, confirm_token=NULL WHERE confirm_token=?2",

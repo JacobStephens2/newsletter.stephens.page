@@ -1,7 +1,7 @@
 //! Multi-list newsletter service for Jacob Stephens' blogs (Rust/Axum).
 //!
 //! One service backs several blogs via a `list` key (default "stephens", also
-//! "personal"). Subscribers and sends are scoped per list; confirm/unsubscribe
+//! "personal" and "wire" for Wire Report updates). Subscribers and sends are scoped per list; confirm/unsubscribe
 //! links and all sends go through newsletter.stephens.page.
 //!
 //! Public: GET / (subscribe page), POST /subscribe, GET /confirm, GET|POST /unsubscribe, GET /health.
@@ -48,12 +48,22 @@ pub struct ListCfg {
     pub from_name: &'static str,
     pub blog_dir: &'static str,
     pub blog_url: &'static str,
+    /// What subscribers receive, e.g. "new posts" (confirm email wording).
+    pub what: &'static str,
+    /// Where they subscribed, for the email footer.
+    pub subscribed_at: &'static str,
+    /// Back link on the confirm / unsubscribe pages.
+    pub home_url: &'static str,
+    pub home_label: &'static str,
+    /// Shown on the confirm page.
+    pub confirmed_blurb: &'static str,
 }
 
 /// Normalize an arbitrary list string to a known list key.
 pub fn valid_list(list: &str) -> &'static str {
     match list {
         "personal" => "personal",
+        "wire" => "wire",
         _ => "stephens",
     }
 }
@@ -67,6 +77,25 @@ pub fn list_cfg(list: &str) -> ListCfg {
             from_name: "Jacob Stephens",
             blog_dir: "/var/www/blog.stephens.page/posts",
             blog_url: "https://jacobstephens.net/posts",
+            what: "new posts",
+            subscribed_at: "stephens.page/blog",
+            home_url: "https://stephens.page/blog/",
+            home_label: "Back to the blog",
+            confirmed_blurb: BLOG_CONFIRMED,
+        },
+        "wire" => ListCfg {
+            key: "wire",
+            display: "Wire Report development updates",
+            from_email: "jacob@stephens.page",
+            from_name: "Jacob Stephens",
+            blog_dir: "/var/www/wire.stephens.page/updates",
+            blog_url: "https://wire.stephens.page/updates",
+            what: "Wire Report updates",
+            subscribed_at: "wire.stephens.page",
+            home_url: "https://wire.stephens.page/",
+            home_label: "Back to Wire Report",
+            confirmed_blurb: "<p>Thanks for confirming. You'll get an occasional email about Wire Report, such as a playable build or a development update. Nothing else.</p>\
+             <p>Every email includes a one-click unsubscribe link if you ever change your mind.</p>",
         },
         _ => ListCfg {
             key: "stephens",
@@ -75,9 +104,17 @@ pub fn list_cfg(list: &str) -> ListCfg {
             from_name: "Jacob Stephens",
             blog_dir: "/var/www/stephens.page/blog",
             blog_url: "https://stephens.page/blog",
+            what: "new posts",
+            subscribed_at: "stephens.page/blog",
+            home_url: "https://stephens.page/blog/",
+            home_label: "Back to the blog",
+            confirmed_blurb: BLOG_CONFIRMED,
         },
     }
 }
+
+const BLOG_CONFIRMED: &str = "<p>Thanks for confirming. You'll get an email when I publish a new post - nothing else.</p>\
+             <p>Every email includes a one-click unsubscribe link if you ever change your mind.</p>";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -255,7 +292,7 @@ async fn subscribe(State(state): State<AppState>, headers: HeaderMap, Form(form)
 
     let lc = list_cfg(list);
     let confirm_url = format!("{}/confirm?token={}", state.cfg.public_url.trim_end_matches('/'), confirm_token);
-    let (html, text) = mail::confirm_email(&confirm_url, lc.display);
+    let (html, text) = mail::confirm_email(&confirm_url, lc.display, lc.what);
     let from = format!("{} <{}>", lc.from_name, lc.from_email);
     if let Err(e) = mail::send(&state.http, &state.cfg.resend_key, &from, &email,
         &format!("Confirm your subscription to {}", lc.display), &html, &text, &HashMap::new()).await
@@ -273,46 +310,49 @@ struct TokenQuery {
 }
 
 async fn confirm(State(state): State<AppState>, Query(q): Query<TokenQuery>) -> Response {
+    let lc = list_cfg("");
     if !hexish(&q.token) {
         return (StatusCode::BAD_REQUEST, Html(mail::landing_page("Invalid link", "That link doesn't look right",
-            "<p>The confirmation link is missing or malformed. Try subscribing again from the blog.</p>"))).into_response();
+            "<p>The confirmation link is missing or malformed. Try subscribing again.</p>", &lc))).into_response();
     }
-    let res = {
+    let (res, lc) = {
         let conn = state.db.lock().unwrap();
-        db::confirm(&conn, &q.token, now())
+        let list = db::list_for_confirm_token(&conn, &q.token).ok().flatten().unwrap_or_default();
+        (db::confirm(&conn, &q.token, now()), list_cfg(&list))
     };
     match res {
         Ok(true) => Html(mail::landing_page("Subscription confirmed", "You're subscribed",
-            "<p>Thanks for confirming. You'll get an email when I publish a new post - nothing else.</p>\
-             <p>Every email includes a one-click unsubscribe link if you ever change your mind.</p>")).into_response(),
+            lc.confirmed_blurb, &lc)).into_response(),
         Ok(false) => Html(mail::landing_page("Already confirmed", "You're all set",
-            "<p>This link has already been used. If you've confirmed once, you're subscribed - nothing more to do.</p>")).into_response(),
+            "<p>This link has already been used. If you've confirmed once, you're subscribed - nothing more to do.</p>", &lc)).into_response(),
         Err(e) => {
             tracing::error!("confirm error: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, Html(mail::landing_page("Something went wrong", "Something went wrong",
-                "<p>We couldn't confirm your subscription just now. Please try the link again shortly.</p>"))).into_response()
+                "<p>We couldn't confirm your subscription just now. Please try the link again shortly.</p>", &lc))).into_response()
         }
     }
 }
 
 async fn unsubscribe_get(State(state): State<AppState>, Query(q): Query<TokenQuery>) -> Response {
+    let lc = list_cfg("");
     if !hexish(&q.token) {
         return (StatusCode::BAD_REQUEST, Html(mail::landing_page("Invalid link", "That link doesn't look right",
-            "<p>The unsubscribe link is missing or malformed. Email <a href=\"mailto:jacob@stephens.page\">jacob@stephens.page</a> and I'll remove you.</p>"))).into_response();
+            "<p>The unsubscribe link is missing or malformed. Email <a href=\"mailto:jacob@stephens.page\">jacob@stephens.page</a> and I'll remove you.</p>", &lc))).into_response();
     }
-    let outcome = {
+    let (outcome, lc) = {
         let conn = state.db.lock().unwrap();
-        db::unsubscribe_by_token(&conn, &q.token, now())
+        let list = db::list_for_unsubscribe_token(&conn, &q.token).ok().flatten().unwrap_or_default();
+        (db::unsubscribe_by_token(&conn, &q.token, now()), list_cfg(&list))
     };
     match outcome {
         Ok(db::UnsubOutcome::NotFound) => Html(mail::landing_page("Not found", "We couldn't find that subscription",
-            "<p>This link doesn't match anyone on the list. You may already be removed.</p>")).into_response(),
+            "<p>This link doesn't match anyone on the list. You may already be removed.</p>", &lc)).into_response(),
         Ok(_) => Html(mail::landing_page("Unsubscribed", "You've been unsubscribed",
-            "<p>You won't receive any more newsletter emails. Sorry to see you go - you're welcome back anytime from the blog.</p>")).into_response(),
+            "<p>You won't receive any more newsletter emails. Sorry to see you go - you're welcome back anytime.</p>", &lc)).into_response(),
         Err(e) => {
             tracing::error!("unsubscribe error: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, Html(mail::landing_page("Something went wrong", "Something went wrong",
-                "<p>We couldn't process that just now. Please try again shortly.</p>"))).into_response()
+                "<p>We couldn't process that just now. Please try again shortly.</p>", &lc))).into_response()
         }
     }
 }
@@ -488,6 +528,8 @@ async fn admin_compose(State(state): State<AppState>, headers: HeaderMap, Json(b
 struct PreviewBody {
     #[serde(default)]
     body_html: String,
+    #[serde(default)]
+    list: String,
 }
 
 async fn admin_preview(State(state): State<AppState>, headers: HeaderMap, Json(body): Json<PreviewBody>) -> Response {
@@ -495,7 +537,7 @@ async fn admin_preview(State(state): State<AppState>, headers: HeaderMap, Json(b
         return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
     let unsub = format!("{}/unsubscribe?token=preview", state.cfg.public_url.trim_end_matches('/'));
-    let (html, _text) = mail::wrap_custom(&body.body_html, &unsub);
+    let (html, _text) = mail::wrap_custom(&body.body_html, &unsub, list_cfg(&body.list).subscribed_at);
     Html(html).into_response()
 }
 
@@ -601,7 +643,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         let Some(slug) = slug else {
-            eprintln!("usage: newsletter send <slug> [--list stephens|personal] [--force]");
+            eprintln!("usage: newsletter send <slug> [--list stephens|personal|wire] [--force]");
             std::process::exit(2);
         };
         let state = build_state(cfg)?;
@@ -632,6 +674,7 @@ async fn main() -> anyhow::Result<()> {
             "https://stephens.page".parse::<HeaderValue>().unwrap(),
             "https://jacobstephens.net".parse::<HeaderValue>().unwrap(),
             "https://blog.stephens.page".parse::<HeaderValue>().unwrap(),
+            "https://wire.stephens.page".parse::<HeaderValue>().unwrap(),
         ])
         .allow_methods([Method::GET, Method::POST]);
 

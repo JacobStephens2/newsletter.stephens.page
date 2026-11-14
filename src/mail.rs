@@ -54,13 +54,14 @@ pub fn esc(s: &str) -> String {
 }
 
 /// Confirmation (double opt-in) email body.
-pub fn confirm_email(confirm_url: &str, display: &str) -> (String, String) {
+pub fn confirm_email(confirm_url: &str, display: &str, what: &str) -> (String, String) {
+    let w = esc(what);
     let u = esc(confirm_url);
     let d = esc(display);
     let html = format!(
         r#"<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.6;color:#181512;max-width:520px;">
   <p>Thanks for subscribing to <strong>{d}</strong>.</p>
-  <p>Please confirm your email address to start receiving new posts:</p>
+  <p>Please confirm your email address to start receiving {w}:</p>
   <p style="margin:24px 0;">
     <a href="{u}" style="background:#9b4d24;color:#fff;text-decoration:none;padding:11px 18px;border-radius:6px;font-weight:600;display:inline-block;">Confirm subscription</a>
   </p>
@@ -69,7 +70,7 @@ pub fn confirm_email(confirm_url: &str, display: &str) -> (String, String) {
 </div>"#
     );
     let text = format!(
-        "Thanks for subscribing to {display}.\n\nConfirm your email address to start receiving new posts:\n{confirm_url}\n\nIf you didn't request this, ignore this email and you won't be added."
+        "Thanks for subscribing to {display}.\n\nConfirm your email address to start receiving {what}:\n{confirm_url}\n\nIf you didn't request this, ignore this email and you won't be added."
     );
     (html, text)
 }
@@ -125,14 +126,15 @@ fn strip_tags(html: &str) -> String {
 
 /// Wrap a custom composed body (from the WYSIWYG editor) in the standard email
 /// container and unsubscribe footer. Returns (html, text).
-pub fn wrap_custom(body_html: &str, unsub_url: &str) -> (String, String) {
+pub fn wrap_custom(body_html: &str, unsub_url: &str, subscribed_at: &str) -> (String, String) {
     let u = esc(unsub_url);
+    let at = esc(subscribed_at);
     let html = format!(
         r#"<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.6;color:#181512;max-width:560px;">
   {body_html}
   <hr style="border:none;border-top:1px solid #d6d1c9;margin:24px 0;">
   <p style="color:#8a8178;font-size:12px;margin:0;">
-    You're receiving this because you subscribed at stephens.page/blog.
+    You're receiving this because you subscribed at {at}.
     <a href="{u}" style="color:#8a8178;">Unsubscribe</a>.
   </p>
 </div>"#
@@ -318,7 +320,9 @@ html.theme-ready,html.theme-ready body{transition:background-color .18s ease,col
 </html>"##;
 
 /// Branded landing page (confirm / unsubscribe screens), mirrors the blog style.
-pub fn landing_page(title: &str, heading: &str, body_html: &str) -> String {
+pub fn landing_page(title: &str, heading: &str, body_html: &str, lc: &crate::ListCfg) -> String {
+    let home_url = esc(lc.home_url);
+    let home_label = esc(lc.home_label);
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -345,7 +349,7 @@ a{{color:var(--brand);}}
 <div class="card">
 <h1>{heading}</h1>
 {body_html}
-<a class="btn" href="https://stephens.page/blog/">&larr; Back to the blog</a>
+<a class="btn" href="{home_url}">&larr; {home_label}</a>
 </div>
 </body>
 </html>"#
